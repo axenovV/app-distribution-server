@@ -1,4 +1,5 @@
 import json
+import os
 
 from fs import errors, open_fs, path
 
@@ -13,7 +14,23 @@ LEGACY_BUILD_INFO_JSON_FILE_NAME = "app_info.json"
 INDEXES_DIRECTORY = "_indexes"
 
 
-filesystem = open_fs(STORAGE_URL, create=True)
+def _create_filesystem():
+    """Create filesystem with support for custom S3 endpoints."""
+    # Check if we're using S3 and have a custom endpoint
+    if STORAGE_URL.startswith("s3://"):
+        endpoint_url = os.getenv("AWS_ENDPOINT_URL")
+        if endpoint_url:
+            # For S3-compatible storage, boto3 (used by fs-s3fs) reads AWS_ENDPOINT_URL
+            # from environment variables automatically. We ensure it's set.
+            # fs-s3fs will use boto3 which reads AWS_ENDPOINT_URL automatically
+            logger.info(f"Using S3-compatible storage with endpoint: {endpoint_url}")
+            # Ensure the endpoint URL is available for boto3
+            os.environ.setdefault("AWS_ENDPOINT_URL", endpoint_url)
+    
+    return open_fs(STORAGE_URL, create=True)
+
+
+filesystem = _create_filesystem()
 
 
 def create_parent_directories(upload_id: str):

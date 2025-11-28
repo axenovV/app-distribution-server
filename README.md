@@ -82,6 +82,19 @@ uploaded prior to v2.
   
   AWS S3 Example: `s3://your-bucket-name` (and then provide the credentials via the usual
   `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`).
+  
+  For S3-compatible storage (like Timeweb Cloud, MinIO, DigitalOcean Spaces), you also need to set:
+  - `AWS_ENDPOINT_URL`: The S3-compatible endpoint URL (e.g., `https://s3.twcstorage.ru`)
+  - `AWS_REGION`: The region (optional, but recommended)
+  
+  Example for Timeweb Cloud S3:
+  ```bash
+  STORAGE_URL=s3://your-bucket-name
+  AWS_ACCESS_KEY_ID=your-access-key
+  AWS_SECRET_ACCESS_KEY=your-secret-key
+  AWS_ENDPOINT_URL=https://s3.twcstorage.ru
+  AWS_REGION=ru-1
+  ```
 
 - `LOGO_URL`: The logo URL - absolute URL or a relative path to a logo `src`. Defaults to
   `/static/logo.svg` (Significa's logo). Disable the logo by setting it to `false`
