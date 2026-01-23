@@ -1,0 +1,47 @@
+{% extends "base.jinja.html" %}
+
+{% block content %}
+<main>
+  <div class="card">
+    <h1>Get iOS Device UDID</h1>
+    <p class="description">
+      Tap the button below to install a temporary profile that will retrieve your device UDID.
+    </p>
+    <p class="note">
+      After tapping, go to <strong>Settings</strong> to install the profile.
+      The profile will be automatically removed after retrieving your UDID.
+    </p>
+
+    <div class="install">
+      <a href="{{ enroll_url }}">Get UDID</a>
+    </div>
+
+    {% if logo_url %}
+    <div class="logo">
+      <a href="https://significa.co" rel="noopener noreferrer">
+        <img src="{{ logo_url }}" alt="Significa Logo" />
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</main>
+
+<footer>
+  <a href="https://github.com/significa/app-distribution-server" target="_blank" rel="noopener noreferrer">
+    Significa App Distribution Server
+  </a>
+</footer>
+
+<style>
+  .description {
+    margin: 0.5rem 0;
+    color: #333;
+  }
+
+  .note {
+    font-size: 0.85rem;
+    color: #666;
+    margin: 0.5rem 0;
+  }
+</style>
+{% endblock %}
