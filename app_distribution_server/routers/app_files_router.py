@@ -2,7 +2,7 @@ from typing import Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app_distribution_server.build_info import (
@@ -12,6 +12,7 @@ from app_distribution_server.config import (
     get_absolute_url,
 )
 from app_distribution_server.storage import (
+    get_app_file_presigned_url,
     get_upload_asserted_platform,
     load_app_file,
     load_build_info,
@@ -50,6 +51,33 @@ async def get_item_plist(
     )
 
 
+@router.head(
+    "/get/{upload_id}/app.{file_type}",
+)
+async def head_app_file(
+    upload_id: str,
+    file_type: Literal["ipa", "apk"],
+) -> Response:
+    """Быстрый HEAD: только метаданные из build_info, без обращения к S3.
+
+    iOS OTA делает HEAD перед GET. Если ответить медленно или редиректом
+    на presigned URL (S3 не разрешает HEAD по GET-подписи), iOS прервёт
+    установку. Поэтому HEAD обслуживается локально и мгновенно.
+    """
+    expected_platform = Platform.ios if file_type == "ipa" else Platform.android
+    get_upload_asserted_platform(upload_id, expected_platform=expected_platform)
+    build_info = load_build_info(upload_id)
+
+    return Response(
+        status_code=200,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Length": str(build_info.file_size),
+            "Accept-Ranges": "bytes",
+        },
+    )
+
+
 @router.get(
     "/get/{upload_id}/app.{file_type}",
     response_class=HTMLResponse,
@@ -62,6 +90,14 @@ async def get_app_file(
     get_upload_asserted_platform(upload_id, expected_platform=expected_platform)
 
     build_info = load_build_info(upload_id)
+
+    # Если S3 — редиректим клиента прямо на presigned URL,
+    # не пропуская файл через бэкенд.
+    presigned_url = get_app_file_presigned_url(build_info)
+    if presigned_url is not None:
+        return RedirectResponse(url=presigned_url, status_code=302)
+
+    # Локальный osfs / fallback — старое поведение с буфером в памяти.
     app_file_content = load_app_file(build_info)
 
     created_at_prefix = (

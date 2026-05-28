@@ -1,5 +1,6 @@
 import json
 import os
+from urllib.parse import urlparse
 
 from fs import errors, open_fs, path
 
@@ -12,6 +13,8 @@ PLIST_FILE_NAME = "info.plist"
 BUILD_INFO_JSON_FILE_NAME = "build_info.json"
 LEGACY_BUILD_INFO_JSON_FILE_NAME = "app_info.json"
 INDEXES_DIRECTORY = "_indexes"
+
+PRESIGNED_URL_EXPIRES_IN = int(os.getenv("PRESIGNED_URL_EXPIRES_IN", "3600"))
 
 
 def _create_filesystem():
@@ -26,11 +29,39 @@ def _create_filesystem():
             logger.info(f"Using S3-compatible storage with endpoint: {endpoint_url}")
             # Ensure the endpoint URL is available for boto3
             os.environ.setdefault("AWS_ENDPOINT_URL", endpoint_url)
-    
+
     return open_fs(STORAGE_URL, create=True)
 
 
 filesystem = _create_filesystem()
+
+
+def _parse_s3_storage_url() -> tuple[str, str] | None:
+    """Возвращает (bucket, key_prefix) если STORAGE_URL это s3://, иначе None."""
+    if not STORAGE_URL.startswith("s3://"):
+        return None
+    parsed = urlparse(STORAGE_URL)
+    bucket = parsed.netloc
+    prefix = parsed.path.lstrip("/")
+    return bucket, prefix
+
+
+_s3_bucket_prefix = _parse_s3_storage_url()
+
+
+def _create_presign_client():
+    """Один shared boto3 client для генерации presigned URL. None для local osfs."""
+    if _s3_bucket_prefix is None:
+        return None
+    import boto3
+    return boto3.client(
+        "s3",
+        endpoint_url=os.getenv("AWS_ENDPOINT_URL"),
+        region_name=os.getenv("AWS_REGION"),
+    )
+
+
+_presign_client = _create_presign_client()
 
 
 def create_parent_directories(upload_id: str):
@@ -141,6 +172,28 @@ def load_app_file(
 ) -> bytes:
     with filesystem.open(get_app_file_path(build_info), "rb") as app_file:
         return app_file.read()
+
+
+def get_app_file_presigned_url(
+    build_info: BuildInfo,
+    expires_in: int = PRESIGNED_URL_EXPIRES_IN,
+) -> str | None:
+    """Сгенерировать presigned S3 URL для прямого скачивания клиентом.
+
+    Возвращает None, если хранилище не S3 (например, локальный osfs).
+    """
+    if _s3_bucket_prefix is None or _presign_client is None:
+        return None
+
+    bucket, prefix = _s3_bucket_prefix
+    relative_key = get_app_file_path(build_info)
+    key = f"{prefix}/{relative_key}" if prefix else relative_key
+
+    return _presign_client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": bucket, "Key": key},
+        ExpiresIn=expires_in,
+    )
 
 
 def delete_upload(upload_id: str):
